@@ -1,14 +1,5 @@
 from __future__ import annotations
 import streamlit as st
-import asyncio
-from agents import destination_agent, weather_agent, budget_agent, comparator_agent
-from utils.auth import get_current_user, handle_oauth_callback, render_nav_auth
-from utils.cities import US_CITIES
-
-# TEMP DEBUG — remove after fixing
-if st.secrets.get("supabase", {}).get("url"):
-    st.write("URL:", st.secrets["supabase"]["url"])
-    st.write("Key length:", len(st.secrets["supabase"]["anon_key"]))
 
 st.set_page_config(
     page_title="TripCraft — Find your trip",
@@ -16,7 +7,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Handle OAuth callback on every page load
+import asyncio
+from agents import destination_agent, weather_agent, budget_agent, comparator_agent
+from utils.auth import get_current_user, handle_oauth_callback, render_nav_auth
+from utils.cities import US_CITIES
+
+# Handle OAuth callback — must be after set_page_config
 handle_oauth_callback()
 
 # ── Nav ───────────────────────────────────────────────────────────────────────
@@ -73,7 +69,11 @@ if "selected_interests" not in st.session_state:
 cols = st.columns(5)
 for i, interest in enumerate(INTERESTS):
     with cols[i % 5]:
-        checked = st.checkbox(interest, value=interest in st.session_state.selected_interests, key=f"int_{interest}")
+        checked = st.checkbox(
+            interest,
+            value=interest in st.session_state.selected_interests,
+            key=f"int_{interest}"
+        )
         if checked and interest not in st.session_state.selected_interests:
             st.session_state.selected_interests.append(interest)
         elif not checked and interest in st.session_state.selected_interests:
@@ -87,7 +87,11 @@ if "selected_travellers" not in st.session_state:
 cols2 = st.columns(5)
 for i, ttype in enumerate(TRAVELLER_TYPES):
     with cols2[i % 5]:
-        checked = st.checkbox(ttype, value=ttype in st.session_state.selected_travellers, key=f"tt_{ttype}")
+        checked = st.checkbox(
+            ttype,
+            value=ttype in st.session_state.selected_travellers,
+            key=f"tt_{ttype}"
+        )
         if checked and ttype not in st.session_state.selected_travellers:
             st.session_state.selected_travellers.append(ttype)
         elif not checked and ttype in st.session_state.selected_travellers:
@@ -107,7 +111,11 @@ booking_window = st.radio(
 )
 
 st.markdown("")
-search_clicked = st.button("Find my destinations →", type="primary", use_container_width=True)
+search_clicked = st.button(
+    "Find my destinations →",
+    type="primary",
+    use_container_width=True
+)
 
 # ── Run agents ────────────────────────────────────────────────────────────────
 if search_clicked:
@@ -120,12 +128,16 @@ if search_clicked:
 
     with st.spinner("Finding your perfect destinations..."):
         async def run_all():
-            destinations = await destination_agent.run(origin, month, days, interests, travellers)
+            destinations = await destination_agent.run(
+                origin, month, days, interests, travellers
+            )
             weather_data, budget_data = await asyncio.gather(
                 weather_agent.run(destinations, month),
                 budget_agent.run(origin, destinations, days, booking_window)
             )
-            return await comparator_agent.run(destinations, weather_data, budget_data, interests, travellers)
+            return await comparator_agent.run(
+                destinations, weather_data, budget_data, interests, travellers
+            )
 
         try:
             cards = asyncio.run(run_all())
