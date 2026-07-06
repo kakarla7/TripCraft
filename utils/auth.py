@@ -1,6 +1,5 @@
 from __future__ import annotations
 import streamlit as st
-
 from utils.supabase_client import get_supabase
 
 
@@ -12,54 +11,11 @@ def is_logged_in() -> bool:
     return get_current_user() is not None
 
 
-def get_google_auth_url() -> str | None:
-    """Get Google OAuth URL from Supabase."""
-    try:
-        sb = get_supabase()
-        app_url = st.secrets.get("app_url", "http://localhost:8501")
-        response = sb.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {"redirect_to": app_url}
-        })
-        return response.url if response and response.url else None
-    except Exception as e:
-        st.error(f"Login error: {e}")
-        return None
-
-
 def handle_oauth_callback() -> bool:
-    """
-    Supabase returns tokens in URL hash (#access_token=...).
-    This JS snippet runs on every page load, reads the hash,
-    and rewrites the URL as query params (?access_token=...)
-    so Streamlit can read them server-side.
-    """
+    """Handle OAuth callback — reads access_token from query params."""
     if "user" in st.session_state:
         return True
 
-    # Inject JS that converts hash params to query params
-    st.html("""
-        <script>
-        (function() {
-            const hash = window.location.hash;
-            if (hash && hash.includes('access_token')) {
-                const params = new URLSearchParams(hash.replace('#', ''));
-                const access_token = params.get('access_token');
-                const refresh_token = params.get('refresh_token') || '';
-                if (access_token) {
-                    const url = window.location.href.split('#')[0];
-                    const newUrl = url + 
-                        (url.includes('?') ? '&' : '?') + 
-                        'access_token=' + encodeURIComponent(access_token) +
-                        '&refresh_token=' + encodeURIComponent(refresh_token);
-                    window.location.replace(newUrl);
-                }
-            }
-        })();
-        </script>
-    """)
-
-    # Now check query params for tokens
     params = st.query_params
 
     if "error" in params:
@@ -88,7 +44,47 @@ def handle_oauth_callback() -> bool:
             st.error(f"Could not complete login: {e}")
             st.query_params.clear()
 
+    # JS bridge — converts URL hash tokens to query params
+    # Runs silently on every page load
+    st.html("""
+    <div id="auth-bridge" style="display:none">
+    <script>
+    setTimeout(function() {
+        const hash = window.parent.location.hash;
+        if (hash && hash.includes('access_token')) {
+            const p = new URLSearchParams(hash.replace('#', ''));
+            const at = p.get('access_token');
+            const rt = p.get('refresh_token') || '';
+            if (at) {
+                const base = window.parent.location.href.split('#')[0];
+                const sep = base.includes('?') ? '&' : '?';
+                window.parent.location.replace(base + sep + 'access_token=' + encodeURIComponent(at) + '&refresh_token=' + encodeURIComponent(rt));
+            }
+        }
+    }, 500);
+    </script>
+    </div>
+    """)
+
     return False
+
+
+def login_with_google():
+    """Redirect to Google OAuth via Supabase."""
+    try:
+        sb = get_supabase()
+        app_url = st.secrets.get("app_url", "http://localhost:8501")
+        response = sb.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {"redirect_to": app_url}
+        })
+        if response and response.url:
+            st.markdown(
+                f'<meta http-equiv="refresh" content="0;url={response.url}">',
+                unsafe_allow_html=True
+            )
+    except Exception as e:
+        st.error(f"Login error: {e}")
 
 
 def logout():
@@ -105,9 +101,8 @@ def logout():
 def require_login(message: str = "Sign in to save and share your trips.") -> bool:
     if not is_logged_in():
         st.info(f"🔐 {message}")
-        auth_url = get_google_auth_url()
-        if auth_url:
-            st.link_button("Sign in with Google", auth_url, type="primary")
+        if st.button("Sign in with Google", type="primary", key="require_login_btn"):
+            login_with_google()
         return False
     return True
 
@@ -123,6 +118,5 @@ def render_nav_auth():
             if st.button("Sign out", key="nav_signout"):
                 logout()
     else:
-        auth_url = get_google_auth_url()
-        if auth_url:
-            st.link_button("Sign in with Google", auth_url, type="primary")
+        if st.button("Sign in with Google", type="primary", key="nav_signin"):
+            login_with_google()
