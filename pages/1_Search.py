@@ -5,6 +5,11 @@ from agents import destination_agent, weather_agent, budget_agent, comparator_ag
 from utils.auth import get_current_user, handle_oauth_callback, render_nav_auth
 from utils.cities import US_CITIES
 
+# TEMP DEBUG — remove after fixing
+if st.secrets.get("supabase", {}).get("url"):
+    st.write("URL:", st.secrets["supabase"]["url"])
+    st.write("Key length:", len(st.secrets["supabase"]["anon_key"]))
+
 st.set_page_config(
     page_title="TripCraft — Find your trip",
     page_icon="✈️",
