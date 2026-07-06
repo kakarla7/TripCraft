@@ -3,12 +3,16 @@ import streamlit as st
 from supabase import create_client, Client
 
 
-@st.cache_resource
 def get_supabase() -> Client:
-    """Cached Supabase client — one connection reused across sessions."""
-    url: str = st.secrets["supabase"]["url"]
-    key: str = st.secrets["supabase"]["anon_key"]
-    return create_client(url, key)
+    """
+    Returns Supabase client — stored in session state to avoid
+    cache issues with st.cache_resource after secrets updates.
+    """
+    if "supabase_client" not in st.session_state:
+        url: str = st.secrets["supabase"]["url"]
+        key: str = st.secrets["supabase"]["anon_key"]
+        st.session_state["supabase_client"] = create_client(url, key)
+    return st.session_state["supabase_client"]
 
 
 def save_search(
@@ -18,7 +22,6 @@ def save_search(
     results: list,
     share_slug: str
 ) -> dict | None:
-    """Save a named search result to Supabase."""
     sb = get_supabase()
     data = {
         "user_id": user_id,
@@ -32,7 +35,6 @@ def save_search(
 
 
 def get_search_by_slug(slug: str) -> dict | None:
-    """Fetch a saved search by share slug."""
     sb = get_supabase()
     response = (
         sb.table("saved_searches")
@@ -45,7 +47,6 @@ def get_search_by_slug(slug: str) -> dict | None:
 
 
 def get_user_searches(user_id: str) -> list:
-    """Fetch all saved searches for a user, newest first."""
     sb = get_supabase()
     response = (
         sb.table("saved_searches")
@@ -58,7 +59,6 @@ def get_user_searches(user_id: str) -> list:
 
 
 def delete_search(search_id: str, user_id: str) -> bool:
-    """Delete a saved search — only if owned by user."""
     sb = get_supabase()
     response = (
         sb.table("saved_searches")
@@ -76,7 +76,6 @@ def save_trip(
     full_plan: dict,
     share_slug: str
 ) -> dict | None:
-    """Save a full Phase 2 trip plan."""
     sb = get_supabase()
     data = {
         "user_id": user_id,
@@ -89,7 +88,6 @@ def save_trip(
 
 
 def get_trip_by_slug(slug: str) -> dict | None:
-    """Fetch a trip plan by share slug."""
     sb = get_supabase()
     response = (
         sb.table("saved_trips")
@@ -102,7 +100,6 @@ def get_trip_by_slug(slug: str) -> dict | None:
 
 
 def get_user_trips(user_id: str) -> list:
-    """Fetch all saved trips for a user."""
     sb = get_supabase()
     response = (
         sb.table("saved_trips")
