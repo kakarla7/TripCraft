@@ -3,7 +3,7 @@ import streamlit as st
 from supabase import create_client, Client
 
 
-@st.cache_resource
+# @st.cache_resource
 def get_supabase() -> Client:
     """Cached Supabase client — one connection reused across sessions."""
     url: str = st.secrets["supabase"]["url"]
