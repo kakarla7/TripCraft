@@ -1,5 +1,38 @@
 from __future__ import annotations
 import streamlit as st
+from streamlit_google_auth import Authenticate
+
+
+def get_authenticator() -> Authenticate:
+    """Get or create the Google authenticator."""
+    if "authenticator" not in st.session_state:
+        app_url = st.secrets.get("app_url", "http://localhost:8501")
+        st.session_state["authenticator"] = Authenticate(
+            secret_credentials_path="google_credentials.json",
+            redirect_uri=app_url,
+            cookie_name="tripcraft_auth",
+            cookie_key=st.secrets.get("cookie_key", "tripcraft_secret_key_2024"),
+            cookie_expiry_days=30
+        )
+    return st.session_state["authenticator"]
+
+
+def handle_oauth_callback() -> bool:
+    """Check authentication status on every page load."""
+    authenticator = get_authenticator()
+    authenticator.check_authentification()
+
+    if st.session_state.get("connected"):
+        if "user" not in st.session_state:
+            user_info = st.session_state.get("user_info", {})
+            st.session_state["user"] = {
+                "id": user_info.get("sub", user_info.get("email", "unknown")),
+                "email": user_info.get("email", ""),
+                "name": user_info.get("name", "Traveller"),
+                "avatar": user_info.get("picture", "")
+            }
+        return True
+    return False
 
 
 def get_current_user():
@@ -7,77 +40,20 @@ def get_current_user():
 
 
 def is_logged_in() -> bool:
-    return get_current_user() is not None
+    return st.session_state.get("connected", False)
 
 
-def get_supabase_client():
-    """Get Supabase client — only import when actually needed."""
-    from utils.supabase_client import get_supabase
-    return get_supabase()
-
-
-def handle_oauth_callback() -> bool:
-    """Handle OAuth callback — reads access_token from query params."""
-    if "user" in st.session_state:
-        return True
-
-    params = st.query_params
-
-    if "error" in params:
-        st.error(f"Login failed: {params.get('error_description', params.get('error'))}")
-        st.query_params.clear()
-        return False
-
-    access_token = params.get("access_token")
-    refresh_token = params.get("refresh_token", "")
-
-    if access_token:
-        try:
-            sb = get_supabase_client()
-            session = sb.auth.set_session(access_token, refresh_token)
-            if session and session.user:
-                st.session_state["user"] = {
-                    "id": session.user.id,
-                    "email": session.user.email,
-                    "name": session.user.user_metadata.get("full_name", "Traveller"),
-                    "avatar": session.user.user_metadata.get("avatar_url", "")
-                }
-                st.query_params.clear()
-                st.rerun()
-                return True
-        except Exception as e:
-            st.error(f"Could not complete login: {e}")
-            st.query_params.clear()
-
-    return False
-
-
-def login_with_google():
-    """Redirect to Google OAuth via Supabase — only called on button click."""
-    try:
-        sb = get_supabase_client()
-        app_url = st.secrets.get("app_url", "http://localhost:8501")
-        response = sb.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {"redirect_to": app_url}
-        })
-        if response and response.url:
-            st.markdown(
-                f'<meta http-equiv="refresh" content="0;url={response.url}">',
-                unsafe_allow_html=True
-            )
-    except Exception as e:
-        st.error(f"Login error: {e}")
+def render_login_button():
+    """Render the Google sign in button."""
+    authenticator = get_authenticator()
+    authenticator.login()
 
 
 def logout():
-    try:
-        sb = get_supabase_client()
-        sb.auth.sign_out()
-    except Exception:
-        pass
+    authenticator = get_authenticator()
+    authenticator.logout()
     for key in ["user", "compare_bucket", "results", "search_params",
-                "current_share_slug", "supabase_client"]:
+                "current_share_slug", "connected", "user_info"]:
         st.session_state.pop(key, None)
     st.rerun()
 
@@ -85,15 +61,14 @@ def logout():
 def require_login(message: str = "Sign in to save and share your trips.") -> bool:
     if not is_logged_in():
         st.info(f"🔐 {message}")
-        if st.button("Sign in with Google", type="primary", key="require_login_btn"):
-            login_with_google()
+        render_login_button()
         return False
     return True
 
 
 def render_nav_auth():
     user = get_current_user()
-    if user:
+    if is_logged_in() and user:
         col1, col2 = st.columns([3, 1])
         with col1:
             name = user.get("name", "").split()[0] if user.get("name") else "Traveller"
@@ -102,5 +77,4 @@ def render_nav_auth():
             if st.button("Sign out", key="nav_signout"):
                 logout()
     else:
-        if st.button("Sign in with Google", type="primary", key="nav_signin"):
-            login_with_google()
+        render_login_button()
