@@ -1,37 +1,36 @@
+from __future__ import annotations
 import streamlit as st
 import asyncio
 from agents import destination_agent, weather_agent, budget_agent, comparator_agent
-from utils.auth import get_current_user, is_logged_in, login_with_google, logout, handle_oauth_callback
+from utils.auth import get_current_user, handle_oauth_callback, render_nav_auth
+from utils.cities import US_CITIES
 
-st.set_page_config(page_title="TripCraft — Find your trip", page_icon="✈️", layout="wide")
+st.set_page_config(
+    page_title="TripCraft — Find your trip",
+    page_icon="✈️",
+    layout="wide"
+)
 
-# Handle OAuth callback if returning from Google
+# Handle OAuth callback on every page load
 handle_oauth_callback()
 
-# ── Header ────────────────────────────────────────────────────────────────────
-col_logo, col_nav = st.columns([1, 3])
+# ── Nav ───────────────────────────────────────────────────────────────────────
+col_logo, col_search, col_trips, col_compare, col_auth = st.columns([2, 1, 1, 1, 2])
 with col_logo:
     st.markdown("### ✈️ TripCraft")
-with col_nav:
-    c1, c2, c3, c4 = st.columns([1,1,1,2])
-    with c1:
-        if st.button("Search"):
-            st.switch_page("pages/1_Search.py")
-    with c2:
-        if st.button("My trips"):
-            st.switch_page("pages/4_My_Trips.py")
-    with c3:
-        if st.button("Compare"):
-            st.switch_page("pages/3_Compare.py")
-    with c4:
-        user = get_current_user()
-        if user:
-            st.markdown(f"👤 {user['name'].split()[0]}  &nbsp; ", unsafe_allow_html=True)
-            if st.button("Sign out", key="signout"):
-                logout()
-        else:
-            if st.button("Sign in with Google", type="primary"):
-                login_with_google()
+with col_search:
+    if st.button("Search", use_container_width=True):
+        st.switch_page("pages/1_Search.py")
+with col_trips:
+    if st.button("My trips", use_container_width=True):
+        st.switch_page("pages/4_My_Trips.py")
+with col_compare:
+    bucket = st.session_state.get("compare_bucket", [])
+    label = f"Compare ({len(bucket)})" if bucket else "Compare"
+    if st.button(label, use_container_width=True):
+        st.switch_page("pages/3_Compare.py")
+with col_auth:
+    render_nav_auth()
 
 st.divider()
 
@@ -41,74 +40,74 @@ st.markdown("Tell us about your trip and we'll find the best US destinations for
 st.markdown("")
 
 # ── Form ──────────────────────────────────────────────────────────────────────
-with st.container():
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        origin = st.text_input("Starting city", placeholder="e.g. New York, NY", key="origin")
-    with col2:
-        month = st.selectbox("Month of travel", [
-            "January","February","March","April","May","June",
-            "July","August","September","October","November","December"
-        ], index=9)
-    with col3:
-        days = st.number_input("Number of days", min_value=2, max_value=30, value=7)
-
-    st.markdown("**What are you into?**")
-    INTERESTS = [
-        "National Parks", "Hiking", "Historic places", "Museums",
-        "Food scene", "Beach", "Nightlife", "Shopping",
-        "Adventure", "Romantic getaway"
-    ]
-    if "selected_interests" not in st.session_state:
-        st.session_state.selected_interests = []
-
-    cols = st.columns(5)
-    for i, interest in enumerate(INTERESTS):
-        with cols[i % 5]:
-            is_on = interest in st.session_state.selected_interests
-            if st.checkbox(interest, value=is_on, key=f"int_{interest}"):
-                if interest not in st.session_state.selected_interests:
-                    st.session_state.selected_interests.append(interest)
-            else:
-                if interest in st.session_state.selected_interests:
-                    st.session_state.selected_interests.remove(interest)
-
-    st.markdown("**Who's travelling?**")
-    TRAVELLER_TYPES = ["Kid friendly", "Senior friendly", "Solo", "Couple", "Group"]
-    if "selected_travellers" not in st.session_state:
-        st.session_state.selected_travellers = []
-
-    cols2 = st.columns(5)
-    for i, ttype in enumerate(TRAVELLER_TYPES):
-        with cols2[i % 5]:
-            is_on = ttype in st.session_state.selected_travellers
-            if st.checkbox(ttype, value=is_on, key=f"tt_{ttype}"):
-                if ttype not in st.session_state.selected_travellers:
-                    st.session_state.selected_travellers.append(ttype)
-            else:
-                if ttype in st.session_state.selected_travellers:
-                    st.session_state.selected_travellers.remove(ttype)
-
-    st.markdown("**When are you booking?**")
-    booking_window = st.radio(
-        "Booking window",
-        options=["3_months", "4_8_weeks", "last_minute"],
-        format_func=lambda x: {
-            "3_months": "3+ months out (best prices)",
-            "4_8_weeks": "4–8 weeks out",
-            "last_minute": "Under 2 weeks (last minute)"
-        }[x],
-        horizontal=True,
-        label_visibility="collapsed"
+col1, col2, col3 = st.columns(3)
+with col1:
+    origin = st.selectbox(
+        "Starting city",
+        options=[""] + US_CITIES,
+        index=0,
+        help="Type to filter cities"
     )
+with col2:
+    month = st.selectbox("Month of travel", [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ], index=9)
+with col3:
+    days = st.number_input("Number of days", min_value=2, max_value=30, value=7)
 
-    st.markdown("")
-    search_clicked = st.button("Find my destinations →", type="primary", use_container_width=True)
+st.markdown("**What are you into?**")
+INTERESTS = [
+    "National Parks", "Hiking", "Historic places", "Museums",
+    "Food scene", "Beach", "Nightlife", "Shopping",
+    "Adventure", "Romantic getaway"
+]
+if "selected_interests" not in st.session_state:
+    st.session_state.selected_interests = []
+
+cols = st.columns(5)
+for i, interest in enumerate(INTERESTS):
+    with cols[i % 5]:
+        checked = st.checkbox(interest, value=interest in st.session_state.selected_interests, key=f"int_{interest}")
+        if checked and interest not in st.session_state.selected_interests:
+            st.session_state.selected_interests.append(interest)
+        elif not checked and interest in st.session_state.selected_interests:
+            st.session_state.selected_interests.remove(interest)
+
+st.markdown("**Who's travelling?**")
+TRAVELLER_TYPES = ["Kid friendly", "Senior friendly", "Solo", "Couple", "Group"]
+if "selected_travellers" not in st.session_state:
+    st.session_state.selected_travellers = []
+
+cols2 = st.columns(5)
+for i, ttype in enumerate(TRAVELLER_TYPES):
+    with cols2[i % 5]:
+        checked = st.checkbox(ttype, value=ttype in st.session_state.selected_travellers, key=f"tt_{ttype}")
+        if checked and ttype not in st.session_state.selected_travellers:
+            st.session_state.selected_travellers.append(ttype)
+        elif not checked and ttype in st.session_state.selected_travellers:
+            st.session_state.selected_travellers.remove(ttype)
+
+st.markdown("**When are you booking?**")
+booking_window = st.radio(
+    "Booking window",
+    options=["3_months", "4_8_weeks", "last_minute"],
+    format_func=lambda x: {
+        "3_months": "3+ months out (best prices)",
+        "4_8_weeks": "4–8 weeks out",
+        "last_minute": "Under 2 weeks (last minute)"
+    }[x],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
+st.markdown("")
+search_clicked = st.button("Find my destinations →", type="primary", use_container_width=True)
 
 # ── Run agents ────────────────────────────────────────────────────────────────
 if search_clicked:
     if not origin:
-        st.warning("Please enter your starting city.")
+        st.warning("Please select your starting city.")
         st.stop()
 
     interests = st.session_state.selected_interests
@@ -116,25 +115,15 @@ if search_clicked:
 
     with st.spinner("Finding your perfect destinations..."):
         async def run_all():
-            # Phase 1: run destination, weather, budget agents in parallel
-            dest_task = destination_agent.run(origin, month, days, interests, travellers)
-
-            destinations = await dest_task
-
-            # Weather and budget run in parallel once we have destinations
-            weather_task = weather_agent.run(destinations, month)
-            budget_task = budget_agent.run(origin, destinations, days, booking_window)
-
-            weather_data, budget_data = await asyncio.gather(weather_task, budget_task)
-
-            # Comparator merges and ranks
-            cards = await comparator_agent.run(destinations, weather_data, budget_data, interests, travellers)
-            return cards
+            destinations = await destination_agent.run(origin, month, days, interests, travellers)
+            weather_data, budget_data = await asyncio.gather(
+                weather_agent.run(destinations, month),
+                budget_agent.run(origin, destinations, days, booking_window)
+            )
+            return await comparator_agent.run(destinations, weather_data, budget_data, interests, travellers)
 
         try:
             cards = asyncio.run(run_all())
-
-            # Store in session for Results page
             st.session_state["results"] = cards
             st.session_state["search_params"] = {
                 "origin": origin,
@@ -145,7 +134,6 @@ if search_clicked:
                 "booking_window": booking_window
             }
             st.switch_page("pages/2_Results.py")
-
         except Exception as e:
             st.error(f"Something went wrong: {e}")
             st.exception(e)
