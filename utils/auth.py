@@ -1,5 +1,8 @@
 from __future__ import annotations
 import streamlit as st
+import json
+import tempfile
+import os
 from streamlit_google_auth import Authenticate
 
 
@@ -7,21 +10,31 @@ def get_authenticator() -> Authenticate:
     """Get or create the Google authenticator."""
     if "authenticator" not in st.session_state:
         app_url = st.secrets.get("app_url", "http://localhost:8501")
+
+        creds = dict(st.secrets["google_credentials"])
+        creds_dict = {"web": {k: v for k, v in creds.items()}}
+
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        )
+        json.dump(creds_dict, tmp)
+        tmp.flush()
+        tmp.close()
+
         st.session_state["authenticator"] = Authenticate(
-            secret_credentials_path="google_credentials.json",
+            secret_credentials_path=tmp.name,
             redirect_uri=app_url,
             cookie_name="tripcraft_auth",
-            cookie_key=st.secrets.get("cookie_key", "tripcraft_secret_key_2024"),
+            cookie_key=st.secrets.get("cookie_key", "tripcraft_secret_2024"),
             cookie_expiry_days=30
         )
+        st.session_state["creds_tmp_path"] = tmp.name
     return st.session_state["authenticator"]
 
 
 def handle_oauth_callback() -> bool:
-    """Check authentication status on every page load."""
     authenticator = get_authenticator()
     authenticator.check_authentification()
-
     if st.session_state.get("connected"):
         if "user" not in st.session_state:
             user_info = st.session_state.get("user_info", {})
@@ -44,7 +57,6 @@ def is_logged_in() -> bool:
 
 
 def render_login_button():
-    """Render the Google sign in button."""
     authenticator = get_authenticator()
     authenticator.login()
 
@@ -53,7 +65,7 @@ def logout():
     authenticator = get_authenticator()
     authenticator.logout()
     for key in ["user", "compare_bucket", "results", "search_params",
-                "current_share_slug", "connected", "user_info"]:
+                "current_share_slug", "connected", "user_info", "authenticator"]:
         st.session_state.pop(key, None)
     st.rerun()
 
