@@ -23,8 +23,8 @@ AI-powered US trip planner. Find your perfect destination in seconds.
 | 1 | Project setup + multi-agent search | `main` | ✅ Done |
 | 2 | Destination cards + results page | `main` | ✅ Done |
 | 3 | Deploy to Streamlit Cloud | `main` | ✅ Done |
-| 4 | Fix Supabase client (real import) | `feat/supabase-client` | 🟡 In progress |
-| 5 | Real Google OAuth login | `feat/google-auth` | 🔜 Next |
+| 4 | Fix Supabase client (real import) | `feat/supabase-client` | ✅ Done |
+| 5 | Real Google OAuth login | `feat/google-auth` | 🟡 In progress |
 | 6 | Save search with custom name | `feat/save-search` | 🔜 Planned |
 | 7 | Add to compare button on cards | `feat/compare-bucket` | 🔜 Planned |
 | 8 | Amazon-style compare page | `feat/compare-page` | 🔜 Planned |
