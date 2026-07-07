@@ -20,12 +20,13 @@ if share_slug:
 # ── Nav ───────────────────────────────────────────────────────────────────────
 col_logo, col_search, col_trips, col_compare, col_auth = st.columns([2, 1, 1, 1, 2])
 with col_logo:
-    st.markdown("### ✈️ TripCraft")
+    if st.button("✈️ TripCraft", key="logo"):
+        st.switch_page("app.py")
 with col_search:
     if st.button("Search", use_container_width=True):
         st.switch_page("pages/1_Search.py")
 with col_trips:
-    if st.button("My trips", use_container_width=True):
+    if st.button("My Trips", use_container_width=True):
         st.switch_page("pages/4_My_Trips.py")
 with col_compare:
     bucket = st.session_state.get("compare_bucket", [])
@@ -41,10 +42,7 @@ st.markdown("## ⚖️ Compare destinations")
 if "compare_bucket" not in st.session_state:
     st.session_state.compare_bucket = []
 
-# ── Get destinations to compare ───────────────────────────────────────────────
-bucket = st.session_state.get("compare_bucket", [])
-
-# Also allow picking from saved searches if logged in
+# ── Pick from saved searches ──────────────────────────────────────────────────
 if is_logged_in():
     user = get_current_user()
     try:
@@ -53,22 +51,27 @@ if is_logged_in():
         saved_searches = []
 
     if saved_searches:
-        st.markdown("**Add more destinations from your saved searches:**")
+        st.markdown("**Add destinations from your saved searches:**")
         for search in saved_searches:
-            name = search.get("name", "Unnamed search")
+            sname = search.get("name", "Unnamed search")
             results = search.get("results", [])
             params = search.get("search_params", {})
-            with st.expander(f"📍 {name} · {params.get('origin','?')} · {params.get('month','?')}"):
+            with st.expander(
+                f"📍 {sname} · {params.get('origin','?')} · {params.get('month','?')}"
+            ):
                 dest_cols = st.columns(len(results)) if results else []
                 for j, (dest, dc) in enumerate(zip(results, dest_cols)):
                     with dc:
-                        in_bucket = any(b["name"] == dest["name"]
-                                        for b in st.session_state.compare_bucket)
+                        in_bucket = any(
+                            b["name"] == dest["name"]
+                            for b in st.session_state.compare_bucket
+                        )
                         bucket_full = len(st.session_state.compare_bucket) >= 4
                         st.markdown(f"**{dest['name']}**, {dest['state']}")
                         st.caption(dest.get("match_label", ""))
                         if in_bucket:
-                            if st.button("✓ In compare", key=f"saved_{search['id']}_{j}",
+                            if st.button("✓ In compare",
+                                         key=f"saved_{search['id']}_{j}",
                                          use_container_width=True):
                                 st.session_state.compare_bucket = [
                                     b for b in st.session_state.compare_bucket
@@ -76,30 +79,41 @@ if is_logged_in():
                                 ]
                                 st.rerun()
                         elif bucket_full:
-                            st.button("Full (max 4)", key=f"saved_{search['id']}_{j}",
-                                      disabled=True, use_container_width=True)
+                            st.button("Full (max 4)",
+                                      key=f"saved_{search['id']}_{j}",
+                                      disabled=True,
+                                      use_container_width=True)
                         else:
-                            if st.button("+ Add", key=f"saved_{search['id']}_{j}",
+                            if st.button("+ Add",
+                                         key=f"saved_{search['id']}_{j}",
                                          use_container_width=True):
                                 st.session_state.compare_bucket.append({
                                     **dest,
-                                    "search_name": name,
+                                    "search_name": sname,
                                     "search_params": params
                                 })
                                 st.rerun()
 
-# Update bucket after picker
 bucket = st.session_state.get("compare_bucket", [])
 
 if len(bucket) < 2:
-    st.info("Add at least 2 destinations to compare. Use '+ Add to compare' on the results page or pick from your saved searches above.")
+    st.markdown("""
+    <div style="text-align:center; padding:2.5rem; background:#F5F5F0;
+        border-radius:12px; margin:1rem 0;">
+        <div style="font-size:36px; margin-bottom:0.75rem;">⚖️</div>
+        <div style="font-weight:500; font-size:15px; color:#1A1A1A;
+            margin-bottom:0.5rem;">Add at least 2 destinations to compare</div>
+        <div style="font-size:13px; color:#666;">
+            Use "+ Add to compare" on the results page, or pick from your
+            saved searches above.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     if st.button("← Go to search", type="primary"):
         st.switch_page("pages/1_Search.py")
     st.stop()
 
-st.markdown("---")
-
-# ── Compare bucket header ─────────────────────────────────────────────────────
+# ── Clear all button ──────────────────────────────────────────────────────────
 col1, col2 = st.columns([4, 1])
 with col1:
     st.markdown(f"**Comparing {len(bucket)} destinations**")
@@ -108,9 +122,7 @@ with col2:
         st.session_state.compare_bucket = []
         st.rerun()
 
-st.markdown("")
-
-# ── Amazon-style compare table ────────────────────────────────────────────────
+# ── Build HTML compare table with sticky first column ─────────────────────────
 INTEREST_COLORS = {
     "National Parks": ("#E1F5EE", "#0F6E56"),
     "Hiking": ("#EAF3DE", "#3B6D11"),
@@ -129,8 +141,7 @@ INTEREST_COLORS = {
     "Group": ("#EAF3DE", "#3B6D11"),
 }
 
-def win_style(val, all_vals, higher_is_better=True):
-    """Return green style if this value wins."""
+def win_color(val, all_vals, higher_is_better=True):
     try:
         nums = [float(v) for v in all_vals if v is not None]
         if not nums:
@@ -142,193 +153,170 @@ def win_style(val, all_vals, higher_is_better=True):
         pass
     return ""
 
-# Header row
-header_cols = st.columns([2] + [1] * len(bucket))
-with header_cols[0]:
-    st.markdown("**Destination**")
-for i, dest in enumerate(bucket):
-    with header_cols[i + 1]:
-        is_best = dest.get("is_best_match", False)
-        st.markdown(
-            f"**{dest['name']}**{'  ⭐' if is_best else ''}\n\n"
-            f"*{dest['state']}*\n\n"
-            f"<small style='color:#888'>{dest.get('search_name','')}</small>",
-            unsafe_allow_html=True
-        )
-        if st.button("✕ Remove", key=f"remove_{i}", use_container_width=True):
-            st.session_state.compare_bucket.pop(i)
-            st.rerun()
-
-st.markdown("---")
-
-# Match score row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Match score**")
-scores = [dest.get("match_score", 0) for dest in bucket]
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        score = dest.get("match_score", 0)
-        style = win_style(score, scores, higher_is_better=True)
-        st.markdown(f"<span style='{style}'>{dest.get('match_label', f'{score}/5')}</span>",
-                    unsafe_allow_html=True)
-
-# Interests matched row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Interests matched**")
+# Collect all interests across bucket
 all_interests = set()
 for dest in bucket:
     all_interests.update(dest.get("matched_interests", []))
 
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        matched = dest.get("matched_interests", [])
-        badges = ""
-        for interest in all_interests:
-            if interest in matched:
-                bg, fg = INTEREST_COLORS.get(interest, ("#E1F5EE", "#0F6E56"))
-                badges += (f'<span style="background:{bg};color:{fg};'
-                           f'font-size:10px;padding:2px 7px;border-radius:8px;'
-                           f'margin:2px;display:inline-block;">{interest}</span>')
-            else:
-                badges += (f'<span style="background:#F1EFE8;color:#aaa;'
-                           f'font-size:10px;padding:2px 7px;border-radius:8px;'
-                           f'margin:2px;display:inline-block;text-decoration:line-through;">'
-                           f'{interest}</span>')
-        st.markdown(badges, unsafe_allow_html=True)
+# Build rows data
+def dest_header(dest):
+    best = "⭐ " if dest.get("is_best_match") else ""
+    src = dest.get("search_name", "")
+    return f"""
+        <div style="font-weight:600;font-size:14px">{best}{dest['name']}</div>
+        <div style="color:#666;font-size:12px">{dest['state']}</div>
+        <div style="color:#aaa;font-size:11px">{src}</div>
+    """
 
-st.markdown("---")
+def interest_badges(dest):
+    matched = dest.get("matched_interests", [])
+    badges = ""
+    for interest in sorted(all_interests):
+        if interest in matched:
+            bg, fg = INTEREST_COLORS.get(interest, ("#E1F5EE", "#0F6E56"))
+            badges += (f'<span style="background:{bg};color:{fg};font-size:10px;'
+                      f'padding:2px 6px;border-radius:8px;margin:2px;'
+                      f'display:inline-block;">{interest}</span>')
+        else:
+            badges += (f'<span style="background:#F1EFE8;color:#ccc;font-size:10px;'
+                      f'padding:2px 6px;border-radius:8px;margin:2px;'
+                      f'display:inline-block;text-decoration:line-through;">'
+                      f'{interest}</span>')
+    return badges
 
-# Weather row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Weather**")
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        st.markdown(f"🌤 {dest.get('weather_summary', '—')}")
-
-# Flight cost row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Flight cost**")
+scores = [dest.get("match_score", 0) for dest in bucket]
 flight_lows = [dest.get("flight_low", 9999) for dest in bucket]
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        fl = dest.get("flight_low", 0)
-        fh = dest.get("flight_high", 0)
-        style = win_style(fl, flight_lows, higher_is_better=False)
-        st.markdown(f"<span style='{style}'>✈️ ${fl}–${fh}</span>",
-                    unsafe_allow_html=True)
-
-# Total cost row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Total estimated cost**")
 total_lows = [dest.get("total_low", 9999) for dest in bucket]
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        tl = dest.get("total_low", 0)
-        th = dest.get("total_high", 0)
-        style = win_style(tl, total_lows, higher_is_better=False)
-        st.markdown(f"<span style='{style}'>💰 ${tl}–${th}</span>",
-                    unsafe_allow_html=True)
-
-# Cost tier row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Cost tier**")
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        tier = dest.get("cost_tier", "$$")
-        color = "#3B6D11" if tier == "$" else "#854F0B" if tier == "$$$" else "#185FA5"
-        st.markdown(f"<span style='color:{color};font-weight:600'>{tier}</span>",
-                    unsafe_allow_html=True)
-
-st.markdown("---")
-
-# Kid friendly row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Kid friendly**")
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        matched = dest.get("matched_interests", [])
-        if "Kid friendly" in matched:
-            st.markdown("✅ Yes")
-        else:
-            st.markdown("❌ No")
-
-# Senior friendly row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Senior friendly**")
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        matched = dest.get("matched_interests", [])
-        if "Senior friendly" in matched:
-            st.markdown("✅ Yes")
-        else:
-            st.markdown("❌ No")
-
-# Drive time row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Drive time**")
 drive_times = [dest.get("drive_hours", 9999) for dest in bucket]
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        hrs = dest.get("drive_hours", 0)
-        style = win_style(hrs, drive_times, higher_is_better=False)
-        st.markdown(f"<span style='{style}'>🚗 {hrs}h</span>",
-                    unsafe_allow_html=True)
 
-st.markdown("---")
+rows = [
+    ("Destination", [dest_header(d) for d in bucket]),
+    ("Match score", [
+        f"<span style='{win_color(d.get('match_score',0), scores, True)}'>"
+        f"{d.get('match_label', f'{d.get(\"match_score\",0)}/5')}</span>"
+        for d in bucket
+    ]),
+    ("Interests", [interest_badges(d) for d in bucket]),
+    ("Weather", [f"🌤 {d.get('weather_summary','—')}" for d in bucket]),
+    ("Flight cost", [
+        f"<span style='{win_color(d.get(\"flight_low\",9999), flight_lows, False)}'>"
+        f"✈️ ${d.get('flight_low',0)}–${d.get('flight_high',0)}</span>"
+        for d in bucket
+    ]),
+    ("Total cost", [
+        f"<span style='{win_color(d.get(\"total_low\",9999), total_lows, False)}'>"
+        f"💰 ${d.get('total_low',0)}–${d.get('total_high',0)}</span>"
+        for d in bucket
+    ]),
+    ("Cost tier", [
+        f"<span style='color:{'#3B6D11' if d.get('cost_tier')=='$' else '#854F0B' if d.get('cost_tier')=='$$$' else '#185FA5'};font-weight:600'>"
+        f"{d.get('cost_tier','$$')}</span>"
+        for d in bucket
+    ]),
+    ("Kid friendly", [
+        "✅ Yes" if "Kid friendly" in d.get("matched_interests",[]) else "❌ No"
+        for d in bucket
+    ]),
+    ("Senior friendly", [
+        "✅ Yes" if "Senior friendly" in d.get("matched_interests",[]) else "❌ No"
+        for d in bucket
+    ]),
+    ("Drive time", [
+        f"<span style='{win_color(d.get(\"drive_hours\",9999), drive_times, False)}'>"
+        f"🚗 {d.get('drive_hours',0)}h</span>"
+        for d in bucket
+    ]),
+    ("Top things to do", [
+        "<br>".join(f"• {t}" for t in d.get("top_3",[])[:5])
+        for d in bucket
+    ]),
+    ("Search context", [
+        f"<small style='color:#888'>"
+        f"{d.get('search_params',{}).get('origin','?')} · "
+        f"{d.get('search_params',{}).get('month','?')} · "
+        f"{d.get('search_params',{}).get('days','?')} days</small>"
+        for d in bucket
+    ]),
+]
 
-# Top 5 things to do row
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Top things to do**")
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        for thing in dest.get("top_3", [])[:5]:
-            st.markdown(f"• {thing}")
+# Build the HTML table
+col_width = max(160, int(600 / len(bucket)))
+header_cells = "".join(
+    f"<th style='min-width:{col_width}px;padding:12px 14px;"
+    f"background:#fff;border-bottom:2px solid #E8E8E4;"
+    f"vertical-align:top;'>{dest_header(d)}</th>"
+    for d in bucket
+)
 
-st.markdown("---")
+body_rows = ""
+for i, (label, cells) in enumerate(rows):
+    bg = "#FAFAF8" if i % 2 == 0 else "#fff"
+    cell_html = "".join(
+        f"<td style='min-width:{col_width}px;padding:10px 14px;"
+        f"background:{bg};border-bottom:1px solid #F0F0EC;"
+        f"font-size:13px;vertical-align:top;'>{cell}</td>"
+        for cell in cells
+    )
+    body_rows += f"""
+    <tr>
+        <td style="padding:10px 14px;background:{bg};
+            border-bottom:1px solid #F0F0EC;
+            font-weight:500;font-size:13px;color:#444;
+            position:sticky;left:0;z-index:1;
+            min-width:140px;max-width:140px;
+            box-shadow:2px 0 4px rgba(0,0,0,0.06);">
+            {label}
+        </td>
+        {cell_html}
+    </tr>
+    """
 
-# Search context footer
-row = st.columns([2] + [1] * len(bucket))
-with row[0]:
-    st.markdown("**Search context**")
-for i, dest in enumerate(bucket):
-    with row[i + 1]:
-        sp = dest.get("search_params", {})
-        booking = {
-            "3_months": "Book 3+ months out",
-            "4_8_weeks": "Book 4–8 weeks out",
-            "last_minute": "Last minute"
-        }.get(sp.get("booking_window", ""), "")
-        st.markdown(
-            f"<small style='color:#888'>"
-            f"{sp.get('origin','?')} · {sp.get('month','?')} · "
-            f"{sp.get('days','?')} days<br>{booking}</small>",
-            unsafe_allow_html=True
-        )
+table_html = f"""
+<div style="overflow-x:auto;border-radius:12px;
+    border:1px solid #E8E8E4;margin:1rem 0;">
+    <table style="border-collapse:collapse;width:100%;min-width:500px;">
+        <thead>
+            <tr>
+                <th style="min-width:140px;max-width:140px;padding:12px 14px;
+                    background:#F5F5F0;border-bottom:2px solid #E8E8E4;
+                    position:sticky;left:0;z-index:2;
+                    box-shadow:2px 0 4px rgba(0,0,0,0.06);
+                    font-size:13px;color:#666;font-weight:500;">
+                    Attribute
+                </th>
+                {header_cells}
+            </tr>
+        </thead>
+        <tbody>
+            {body_rows}
+        </tbody>
+    </table>
+</div>
+"""
 
-st.markdown("")
+st.markdown(table_html, unsafe_allow_html=True)
 
-# Plan buttons
-plan_cols = st.columns([2] + [1] * len(bucket))
-with plan_cols[0]:
-    st.markdown("**Ready to plan?**")
-for i, dest in enumerate(bucket):
-    with plan_cols[i + 1]:
+# ── Remove individual destinations ────────────────────────────────────────────
+st.markdown("**Remove destinations:**")
+remove_cols = st.columns(len(bucket))
+for i, (dest, col) in enumerate(zip(bucket, remove_cols)):
+    with col:
+        if st.button(f"✕ Remove {dest['name']}", key=f"remove_{i}",
+                     use_container_width=True):
+            st.session_state.compare_bucket.pop(i)
+            st.rerun()
+
+# ── Plan buttons ──────────────────────────────────────────────────────────────
+st.markdown("**Ready to plan?**")
+plan_cols = st.columns(len(bucket))
+for i, (dest, col) in enumerate(zip(bucket, plan_cols)):
+    with col:
         if st.button(f"Plan {dest['name']} →", key=f"plan_{i}",
                      type="primary", use_container_width=True):
             st.session_state["selected_destination"] = dest
             st.info("Phase 2 coming soon!")
 
-# ── Save + Share comparison ───────────────────────────────────────────────────
+# ── Save + Share ──────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown("### Share this comparison")
 

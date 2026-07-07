@@ -4,6 +4,9 @@ import streamlit as st
 st.set_page_config(page_title="TripCraft — Results", page_icon="✈️", layout="wide")
 
 from utils.auth import get_current_user, is_logged_in, require_login, render_nav_auth
+from utils.mobile import inject_mobile_css
+
+inject_mobile_css()
 from utils.share import generate_slug, get_share_url, render_share_sheet
 from utils.supabase_client import save_search, get_search_by_slug
 
