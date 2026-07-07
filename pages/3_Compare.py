@@ -3,9 +3,19 @@ import streamlit as st
 
 st.set_page_config(page_title="TripCraft — Compare", page_icon="✈️", layout="wide")
 
-from utils.auth import render_nav_auth
-from utils.supabase_client import get_user_searches
-from utils.auth import get_current_user, is_logged_in
+from utils.auth import render_nav_auth, get_current_user, is_logged_in
+from utils.supabase_client import get_user_searches, get_comparison_by_slug
+
+# ── Load shared comparison if opened via link ─────────────────────────────────
+share_slug = st.query_params.get("s", None)
+if share_slug:
+    try:
+        saved = get_comparison_by_slug(share_slug)
+        if saved:
+            st.session_state["compare_bucket"] = saved["destinations"]
+            st.info("👀 You're viewing a shared TripCraft comparison.")
+    except Exception:
+        st.error("This share link has expired or doesn't exist.")
 
 # ── Nav ───────────────────────────────────────────────────────────────────────
 col_logo, col_search, col_trips, col_compare, col_auth = st.columns([2, 1, 1, 1, 2])
@@ -26,6 +36,10 @@ with col_auth:
 
 st.divider()
 st.markdown("## ⚖️ Compare destinations")
+
+# ── Initialise bucket ─────────────────────────────────────────────────────────
+if "compare_bucket" not in st.session_state:
+    st.session_state.compare_bucket = []
 
 # ── Get destinations to compare ───────────────────────────────────────────────
 bucket = st.session_state.get("compare_bucket", [])
@@ -313,3 +327,39 @@ for i, dest in enumerate(bucket):
                      type="primary", use_container_width=True):
             st.session_state["selected_destination"] = dest
             st.info("Phase 2 coming soon!")
+
+# ── Save + Share comparison ───────────────────────────────────────────────────
+st.markdown("---")
+st.markdown("### Share this comparison")
+
+if "compare_share_slug" not in st.session_state:
+    col_name, col_save = st.columns([3, 1])
+    with col_name:
+        compare_name = st.text_input(
+            "Name this comparison",
+            placeholder="e.g. Southwest vs East Coast",
+            key="compare_name_input"
+        )
+    with col_save:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("💾 Save & Share", type="primary", key="save_compare_btn"):
+            if not is_logged_in():
+                st.warning("🔐 Sign in to save and share comparisons.")
+            else:
+                from utils.supabase_client import save_comparison
+                from utils.share import generate_slug
+                user = get_current_user()
+                name = compare_name.strip() or "My comparison"
+                slug = generate_slug()
+                try:
+                    save_comparison(user["id"], name, bucket, slug)
+                    st.session_state["compare_share_slug"] = slug
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Could not save: {e}")
+else:
+    from utils.share import get_share_url, render_share_sheet
+    slug = st.session_state["compare_share_slug"]
+    share_url = get_share_url(slug, "Compare")
+    st.success("✅ Saved!")
+    render_share_sheet(share_url, title="Check out this trip comparison on TripCraft!")
