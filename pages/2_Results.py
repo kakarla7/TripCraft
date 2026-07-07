@@ -3,11 +3,9 @@ import streamlit as st
 
 st.set_page_config(page_title="TripCraft — Results", page_icon="✈️", layout="wide")
 
-from utils.auth import get_current_user, handle_oauth_callback, require_login, render_nav_auth
+from utils.auth import get_current_user, is_logged_in, require_login, render_nav_auth
 from utils.share import generate_slug, get_share_url, render_share_sheet
 from utils.supabase_client import save_search, get_search_by_slug
-
-handle_oauth_callback()
 
 # ── Nav ───────────────────────────────────────────────────────────────────────
 col_logo, col_search, col_trips, col_compare, col_auth = st.columns([2, 1, 1, 1, 2])
@@ -69,7 +67,7 @@ with col_title:
 
 st.divider()
 
-# ── Save + Share ───────────────────────────────────────────────────────────────
+# ── Save + Share ──────────────────────────────────────────────────────────────
 if "current_share_slug" not in st.session_state:
     col_name, col_save = st.columns([3, 1])
     with col_name:
@@ -81,7 +79,9 @@ if "current_share_slug" not in st.session_state:
     with col_save:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("💾 Save & Share", type="primary"):
-            if require_login("Sign in to save and share your results."):
+            if not is_logged_in():
+                st.warning("🔐 Sign in first to save. Go to My Trips to sign in.")
+            else:
                 user = get_current_user()
                 name = trip_name.strip() or f"{p.get('origin','Trip')} · {p.get('month','')}"
                 slug = generate_slug()
@@ -94,7 +94,7 @@ if "current_share_slug" not in st.session_state:
 else:
     slug = st.session_state["current_share_slug"]
     share_url = get_share_url(slug, "Results")
-    st.success("✅ Saved! Share this search:")
+    st.success("✅ Saved!")
     render_share_sheet(share_url)
 
 st.markdown("")
@@ -120,7 +120,6 @@ INTEREST_COLORS = {
 CARD_EMOJIS = ["🏔", "🌵", "🌆", "🏖", "🌲"]
 BG_COLORS = ["#E1F5EE", "#FAEEDA", "#EEEDFE", "#FAECE7", "#E6F1FB"]
 
-# Compare bucket state
 if "compare_bucket" not in st.session_state:
     st.session_state.compare_bucket = []
 
@@ -149,7 +148,6 @@ for i, (card, col) in enumerate(zip(cards, cols)):
         st.markdown(f"**{card['name']}**, {card['state']}")
         st.caption(card.get("match_label", ""))
         st.markdown(f"*{card['why']}*")
-
         st.markdown(f"🌤 {card.get('weather_summary', '')}")
 
         fl = card.get("flight_low", 0)
@@ -178,24 +176,25 @@ for i, (card, col) in enumerate(zip(cards, cols)):
         st.markdown(badges_html, unsafe_allow_html=True)
 
         st.markdown("**Top things to do:**")
-        for thing in card.get("top_3", []):
+        for thing in card.get("top_3", [])[:5]:
             st.markdown(f"• {thing}")
 
         st.markdown("")
 
-        # Add to compare button
+        # Add to compare
         in_bucket = any(b["name"] == card["name"] for b in st.session_state.compare_bucket)
         bucket_full = len(st.session_state.compare_bucket) >= 4
 
         if in_bucket:
-            if st.button("✓ Added to compare", key=f"compare_{i}", use_container_width=True):
+            if st.button("✓ In compare", key=f"compare_{i}", use_container_width=True):
                 st.session_state.compare_bucket = [
                     b for b in st.session_state.compare_bucket
                     if b["name"] != card["name"]
                 ]
                 st.rerun()
         elif bucket_full:
-            st.button("Compare full (max 4)", key=f"compare_{i}", disabled=True, use_container_width=True)
+            st.button("Compare full (max 4)", key=f"compare_{i}",
+                      disabled=True, use_container_width=True)
         else:
             if st.button("+ Add to compare", key=f"compare_{i}", use_container_width=True):
                 st.session_state.compare_bucket.append({
@@ -205,18 +204,23 @@ for i, (card, col) in enumerate(zip(cards, cols)):
                 })
                 st.rerun()
 
-        if st.button(f"Plan this trip →", key=f"plan_{i}", use_container_width=True, type="primary"):
+        if st.button("Plan this trip →", key=f"plan_{i}",
+                     use_container_width=True, type="primary"):
             st.session_state["selected_destination"] = card
             st.info("Phase 2 coming soon!")
 
-# ── Floating compare bar ───────────────────────────────────────────────────────
+# ── Compare bar ───────────────────────────────────────────────────────────────
 bucket = st.session_state.get("compare_bucket", [])
 if bucket:
-    names = " · ".join(b["name"] for b in bucket)
     st.markdown("---")
-    col1, col2 = st.columns([4, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
+        names = " · ".join(b["name"] for b in bucket)
         st.markdown(f"**Compare bucket:** {names} ({len(bucket)}/4)")
     with col2:
+        if st.button("Clear", use_container_width=True):
+            st.session_state.compare_bucket = []
+            st.rerun()
+    with col3:
         if st.button("Compare now →", type="primary", use_container_width=True):
             st.switch_page("pages/3_Compare.py")
