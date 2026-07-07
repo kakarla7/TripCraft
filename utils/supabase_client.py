@@ -109,3 +109,44 @@ def get_user_trips(user_id: str) -> list:
         .execute()
     )
     return response.data or []
+
+
+def save_comparison(
+    user_id: str,
+    name: str,
+    destinations: list,
+    share_slug: str
+) -> dict | None:
+    sb = get_supabase()
+    data = {
+        "user_id": user_id,
+        "name": name,
+        "destinations": destinations,
+        "share_slug": share_slug
+    }
+    response = sb.table("saved_comparisons").insert(data).execute()
+    return response.data[0] if response.data else None
+
+
+def get_comparison_by_slug(slug: str) -> dict | None:
+    sb = get_supabase()
+    response = (
+        sb.table("saved_comparisons")
+        .select("*")
+        .eq("share_slug", slug)
+        .single()
+        .execute()
+    )
+    return response.data
+
+
+def get_user_comparisons(user_id: str) -> list:
+    sb = get_supabase()
+    response = (
+        sb.table("saved_comparisons")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data or []
