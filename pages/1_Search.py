@@ -9,21 +9,18 @@ st.set_page_config(
 
 import asyncio
 from agents import destination_agent, weather_agent, budget_agent, comparator_agent
-from utils.auth import get_current_user, handle_oauth_callback, render_nav_auth
+from utils.auth import render_nav_auth
 from utils.cities import US_CITIES
-
-# Handle OAuth callback — must be after set_page_config
-handle_oauth_callback()
 
 # ── Nav ───────────────────────────────────────────────────────────────────────
 col_logo, col_search, col_trips, col_compare, col_auth = st.columns([2, 1, 1, 1, 2])
 with col_logo:
-    st.markdown("### ✈️ TripCraft")
+    if st.button("✈️ TripCraft", key="logo"):
+        st.switch_page("app.py")
 with col_search:
-    if st.button("Search", use_container_width=True):
-        st.switch_page("pages/1_Search.py")
+    st.button("Search", use_container_width=True, disabled=True)
 with col_trips:
-    if st.button("My trips", use_container_width=True):
+    if st.button("My Trips", use_container_width=True):
         st.switch_page("pages/4_My_Trips.py")
 with col_compare:
     bucket = st.session_state.get("compare_bucket", [])
@@ -126,31 +123,47 @@ if search_clicked:
     interests = st.session_state.selected_interests
     travellers = st.session_state.selected_travellers
 
-    with st.spinner("Finding your perfect destinations..."):
-        async def run_all():
-            destinations = await destination_agent.run(
-                origin, month, days, interests, travellers
-            )
-            weather_data, budget_data = await asyncio.gather(
-                weather_agent.run(destinations, month),
-                budget_agent.run(origin, destinations, days, booking_window)
-            )
-            return await comparator_agent.run(
-                destinations, weather_data, budget_data, interests, travellers
-            )
+    # Step-by-step progress
+    st.markdown("")
+    progress = st.progress(0)
+    status = st.empty()
 
-        try:
-            cards = asyncio.run(run_all())
-            st.session_state["results"] = cards
-            st.session_state["search_params"] = {
-                "origin": origin,
-                "month": month,
-                "days": days,
-                "interests": interests,
-                "travellers": travellers,
-                "booking_window": booking_window
-            }
-            st.switch_page("pages/2_Results.py")
-        except Exception as e:
-            st.error(f"Something went wrong: {e}")
-            st.exception(e)
+    async def run_all():
+        status.markdown("🔍 **Finding best destinations for you...**")
+        progress.progress(20)
+        destinations = await destination_agent.run(
+            origin, month, days, interests, travellers
+        )
+
+        status.markdown("🌤 **Checking weather and 💰 estimating costs...**")
+        progress.progress(50)
+        weather_data, budget_data = await asyncio.gather(
+            weather_agent.run(destinations, month),
+            budget_agent.run(origin, destinations, days, booking_window)
+        )
+
+        status.markdown("⭐ **Ranking your matches...**")
+        progress.progress(80)
+        cards = await comparator_agent.run(
+            destinations, weather_data, budget_data, interests, travellers
+        )
+
+        progress.progress(100)
+        status.markdown("✅ **Done! Here are your destinations.**")
+        return cards
+
+    try:
+        cards = asyncio.run(run_all())
+        st.session_state["results"] = cards
+        st.session_state["search_params"] = {
+            "origin": origin,
+            "month": month,
+            "days": days,
+            "interests": interests,
+            "travellers": travellers,
+            "booking_window": booking_window
+        }
+        st.switch_page("pages/2_Results.py")
+    except Exception as e:
+        st.error(f"Something went wrong: {e}")
+        st.exception(e)
